@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { formatDateGR } from '@/lib/coupon-logic'
 // Input kept for the name/email form step
 
-type Step = 'info' | 'scanning' | 'processing' | 'success' | 'done' | 'error'
+type Step = 'info' | 'scanning' | 'processing' | 'needsAmount' | 'success' | 'done' | 'error'
 
 interface CouponResult {
   discountAmount: number
@@ -21,6 +21,7 @@ export default function ScanPage() {
   const [customerName, setCustomerName] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
   const [scannedQR, setScannedQR] = useState('')
+  const [manualAmount, setManualAmount] = useState('')
   const [analyzed, setAnalyzed] = useState<{ amount: number; discount: number; autoDetected: boolean } | null>(null)
   const [coupon, setCoupon] = useState<CouponResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -100,6 +101,30 @@ export default function ScanPage() {
       return
     }
 
+    if (data.needsManualAmount) {
+      setStep('needsAmount')
+      return
+    }
+
+    setAnalyzed(data)
+    setStep('success')
+  }
+
+  const handleManualAmount = async () => {
+    const amount = parseFloat(manualAmount.replace(',', '.'))
+    if (isNaN(amount) || amount <= 0) { toast.error('Βάλε έγκυρο ποσό'); return }
+    if (amount < 10) { toast.error('Η παραγγελία πρέπει να είναι τουλάχιστον €10'); return }
+    setStep('processing')
+
+    const res = await fetch('/api/receipts/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ qrContent: scannedQR, manualAmount: amount }),
+    })
+
+    const data = await res.json()
+    if (!res.ok) { setErrorMsg(data.error || 'Σφάλμα'); setStep('error'); return }
+
     setAnalyzed(data)
     setStep('success')
   }
@@ -133,6 +158,7 @@ export default function ScanPage() {
   const reset = () => {
     setStep('info')
     setScannedQR('')
+    setManualAmount('')
     setAnalyzed(null)
     setCoupon(null)
     setErrorMsg('')
@@ -248,6 +274,52 @@ export default function ScanPage() {
             </div>
             <h3 className="font-bold text-gray-700 text-xl">Έλεγχος απόδειξης...</h3>
             <p className="text-gray-400 text-sm mt-2">Παρακαλώ περίμενε</p>
+          </div>
+        )}
+
+        {/* Manual amount entry (when AADE auto-detect fails) */}
+        {step === 'needsAmount' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-3xl p-6 shadow-sm">
+              <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-7 h-7 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="font-bold text-gray-800 text-xl text-center mb-2">
+                Απόδειξη επαληθεύτηκε!
+              </h3>
+              <p className="text-gray-500 text-sm text-center mb-5">
+                Βρες το <strong>Σύνολο</strong> στην απόδειξή σου και πληκτρολόγησέ το.
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-bold text-gray-600">€</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="π.χ. 14.50"
+                  value={manualAmount}
+                  onChange={e => setManualAmount(e.target.value)}
+                  className="text-xl font-bold rounded-xl"
+                  autoFocus
+                />
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mt-4">
+                <p className="text-yellow-800 text-xs">
+                  ⚠️ Το ποσό που θα βάλεις θα επαληθευτεί από τον ταμία κατά την εξαργύρωση.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button onClick={reset} variant="outline" className="flex-1 rounded-2xl py-3">Ακύρωση</Button>
+              <Button
+                onClick={handleManualAmount}
+                className="flex-1 bg-red-700 hover:bg-red-600 text-white rounded-2xl py-3 font-bold"
+              >
+                Επιβεβαίωση →
+              </Button>
+            </div>
           </div>
         )}
 

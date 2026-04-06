@@ -8,7 +8,6 @@ export interface ReceiptValidationResult {
 
 /**
  * Tries to extract a monetary amount from raw text (HTML or XML).
- * Returns the most likely "total" amount found.
  */
 function parseAmountFromText(text: string): number | null {
   const patterns = [
@@ -22,51 +21,42 @@ function parseAmountFromText(text: string): number | null {
     /"grossValue"\s*:\s*([\d.]+)/i,
     // Greek HTML labels
     /(?:Σύνολο|ΣΥΝΟΛΟ|Αξία|ΑΞΙΑ|Τελικό Ποσό|ΤΕΛΙΚΟ ΠΟΣΟ|Total)[^€\d]{0,20}([\d]+[.,]\d{2})/i,
-    // Amount followed by € sign
-    /([\d]+[.,]\d{2})\s*€/g,
   ]
 
-  const candidates: number[] = []
-
   for (const pattern of patterns) {
-    if (pattern.global) {
-      const matches = [...text.matchAll(pattern as RegExp)]
-      for (const m of matches) {
-        const val = parseFloat(m[1].replace(',', '.'))
-        if (!isNaN(val) && val > 0) candidates.push(val)
-      }
-    } else {
-      const m = text.match(pattern)
-      if (m) {
-        const val = parseFloat(m[1].replace(',', '.'))
-        if (!isNaN(val) && val > 0) return val
-      }
+    const m = text.match(pattern)
+    if (m) {
+      const val = parseFloat(m[1].replace(',', '.'))
+      if (!isNaN(val) && val > 0) return val
     }
   }
 
-  // From all €-amounts found, the total is usually the largest one
-  if (candidates.length > 0) {
-    return Math.max(...candidates)
-  }
+  // Find all €-amounts, pick the largest (likely the total)
+  const euroMatches = [...text.matchAll(/([\d]+[.,]\d{2})\s*€/g)]
+  const candidates = euroMatches
+    .map(m => parseFloat(m[1].replace(',', '.')))
+    .filter(v => !isNaN(v) && v > 0)
+  if (candidates.length > 0) return Math.max(...candidates)
 
   return null
 }
 
 /**
  * Validates a Greek fiscal receipt QR code.
- * Tries multiple AADE endpoints to extract the total amount.
+ * Accepts any HTTP URL (AADE or other fiscal systems).
+ * Tries to extract the total amount automatically.
  */
 export async function validateReceiptQR(qrContent: string): Promise<ReceiptValidationResult> {
   const takisAFM = process.env.TAKIS_AFM
 
-  // Must be an HTTP URL (AADE receipt links are always URLs)
+  // Must be an HTTP URL
   if (!qrContent.startsWith('http')) {
     return {
       valid: false,
       amount: null,
       vatNumber: null,
       isFromTakis: false,
-      error: 'Αυτό δεν είναι QR κωδικός ελληνικής φορολογικής απόδειξης.',
+      error: 'Αυτό δεν είναι QR κωδικός φορολογικής απόδειξης. Σκάναρε το QR που υπάρχει στην απόδειξη.',
     }
   }
 
@@ -74,16 +64,6 @@ export async function validateReceiptQR(qrContent: string): Promise<ReceiptValid
     qrContent.includes('aade.gr') ||
     qrContent.includes('mydata') ||
     qrContent.includes('timologio')
-
-  if (!isAADEUrl) {
-    return {
-      valid: false,
-      amount: null,
-      vatNumber: null,
-      isFromTakis: false,
-      error: 'Αυτό δεν είναι QR κωδικός ελληνικής φορολογικής απόδειξης.',
-    }
-  }
 
   // Extract Mark parameter for alternative API calls
   let mark: string | null = null
@@ -98,15 +78,13 @@ export async function validateReceiptQR(qrContent: string): Promise<ReceiptValid
 
   // Build list of endpoints to try
   const endpoints: string[] = [qrContent]
-  if (mark) {
+  if (isAADEUrl && mark) {
     endpoints.push(
       `https://www.aade.gr/myDATA/invoiceDoc?Mark=${mark}`,
       `https://www.aade.gr/myDATA/doc?Mark=${mark}`,
     )
     if (uid) {
-      endpoints.push(
-        `https://www.aade.gr/myDATA/invoiceDoc?Mark=${mark}&Uid=${uid}`,
-      )
+      endpoints.push(`https://www.aade.gr/myDATA/invoiceDoc?Mark=${mark}&Uid=${uid}`)
     }
   }
 
@@ -139,7 +117,6 @@ export async function validateReceiptQR(qrContent: string): Promise<ReceiptValid
         vatNumber = vatMatch?.[1] || null
       }
 
-      // Extract amount
       const found = parseAmountFromText(text)
       if (found !== null) {
         amount = found
@@ -150,21 +127,9 @@ export async function validateReceiptQR(qrContent: string): Promise<ReceiptValid
     }
   }
 
-  // If still no amount found, reject (prevents fraud via manual entry)
-  if (amount === null) {
-    return {
-      valid: false,
-      amount: null,
-      vatNumber,
-      isFromTakis: false,
-      error:
-        'Δεν ήταν δυνατή η ανάγνωση του ποσού από την απόδειξη. Δοκίμασε ξανά σε λίγο ή ζήτα βοήθεια από τον ταμία.',
-    }
-  }
-
-  const isFromTakis = takisAFM ? vatNumber === takisAFM : true
-
-  if (vatNumber && !isFromTakis) {
+  // ΑΦΜ check (only if TAKIS_AFM is configured AND we got a vatNumber)
+  const isFromTakis = takisAFM && vatNumber ? vatNumber === takisAFM : true
+  if (takisAFM && vatNumber && !isFromTakis) {
     return {
       valid: false,
       amount: null,
@@ -174,16 +139,17 @@ export async function validateReceiptQR(qrContent: string): Promise<ReceiptValid
     }
   }
 
+  // Valid receipt — amount may or may not have been auto-detected
   return {
     valid: true,
-    amount,
+    amount, // null = needs manual entry
     vatNumber,
     isFromTakis,
   }
 }
 
 /**
- * Extracts a unique hash from the QR code content for anti-fraud.
+ * Unique hash for anti-fraud duplicate detection.
  */
 export function getReceiptHash(qrContent: string): string {
   try {
