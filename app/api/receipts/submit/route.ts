@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import {
-  hashReceiptImage,
   generateQRCode,
   calculateDiscount,
   calculateExpiryDate,
 } from '@/lib/coupon-logic'
+import { getReceiptHash } from '@/lib/receipt-validator'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -14,13 +14,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Απαιτείται σύνδεση' }, { status: 401 })
   }
 
-  const { image, amount } = await req.json()
-  if (!image || !amount) {
+  const { qrContent, amount } = await req.json()
+  if (!qrContent || !amount) {
     return NextResponse.json({ error: 'Ελλιπή δεδομένα' }, { status: 400 })
   }
 
-  // 1. Anti-fraud: check if this receipt was already used
-  const receiptHash = hashReceiptImage(image)
+  // Anti-fraud: check if this receipt QR was already used
+  const receiptHash = getReceiptHash(qrContent)
   const { data: existing } = await supabase
     .from('receipts')
     .select('id')
@@ -34,35 +34,18 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // 2. Validate discount eligibility
+  // Validate discount eligibility
   const discount = calculateDiscount(amount)
   if (!discount.eligible) {
     return NextResponse.json({ error: discount.reason }, { status: 422 })
   }
 
-  // 3. Upload receipt image to Supabase Storage
-  const imageBuffer = Buffer.from(image, 'base64')
-  const fileName = `${user.id}/${Date.now()}.jpg`
-
-  const { error: uploadError } = await supabase.storage
-    .from('receipts')
-    .upload(fileName, imageBuffer, { contentType: 'image/jpeg' })
-
-  if (uploadError) {
-    console.error('Upload error:', uploadError)
-    return NextResponse.json({ error: 'Σφάλμα αποθήκευσης εικόνας' }, { status: 500 })
-  }
-
-  const { data: urlData } = supabase.storage
-    .from('receipts')
-    .getPublicUrl(fileName)
-
-  // 4. Create receipt record
+  // Create receipt record (store QR content as image_url since no photo)
   const { data: receipt, error: receiptError } = await supabase
     .from('receipts')
     .insert({
       user_id: user.id,
-      image_url: urlData.publicUrl,
+      image_url: qrContent,
       amount,
       receipt_hash: receiptHash,
     })
@@ -73,7 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Σφάλμα αποθήκευσης απόδειξης' }, { status: 500 })
   }
 
-  // 5. Create coupon
+  // Create coupon
   const qrCode = generateQRCode()
   const expiresAt = calculateExpiryDate()
 

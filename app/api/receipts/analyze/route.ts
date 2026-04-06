@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { extractAmountFromReceipt } from '@/lib/ocr'
+import { validateReceiptQR } from '@/lib/receipt-validator'
 import { calculateDiscount } from '@/lib/coupon-logic'
 
 export async function POST(req: NextRequest) {
@@ -10,38 +10,52 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Απαιτείται σύνδεση' }, { status: 401 })
   }
 
-  const { image } = await req.json()
-  if (!image) {
-    return NextResponse.json({ error: 'Δεν βρέθηκε εικόνα' }, { status: 400 })
+  const { qrContent, manualAmount } = await req.json()
+  if (!qrContent) {
+    return NextResponse.json({ error: 'Δεν βρέθηκε QR κωδικός' }, { status: 400 })
   }
 
-  const ocr = await extractAmountFromReceipt(image)
+  // If manual amount provided, skip ΑΑΔΕ validation
+  if (manualAmount !== undefined) {
+    const discount = calculateDiscount(manualAmount)
+    if (!discount.eligible) {
+      return NextResponse.json({ error: discount.reason }, { status: 422 })
+    }
+    return NextResponse.json({
+      amount: manualAmount,
+      discount: discount.discountAmount,
+      autoDetected: false,
+    })
+  }
 
-  if (!ocr.isValidReceipt) {
+  // Validate via ΑΑΔΕ myDATA
+  const validation = await validateReceiptQR(qrContent)
+
+  if (!validation.valid) {
+    return NextResponse.json({ error: validation.error }, { status: 422 })
+  }
+
+  // Check if receipt is from ΤΑΚΗΣ (if ΑΦΜ validation is configured)
+  if (validation.vatNumber && !validation.isFromTakis) {
     return NextResponse.json(
-      { error: 'Η απόδειξη δεν φαίνεται να είναι από το ΤΑΚΗΣ. Παρακαλώ χρησιμοποίησε αποδείξεις από το κατάστημά μας.' },
+      { error: 'Η απόδειξη δεν ανήκει στο ΤΑΚΗΣ. Χρησιμοποίησε μόνο αποδείξεις από το κατάστημά μας.' },
       { status: 422 }
     )
   }
 
-  if (ocr.amount === null) {
-    return NextResponse.json(
-      { error: 'Δεν μπόρεσα να διαβάσω το ποσό. Δοκίμασε ξανά με καλύτερο φωτισμό.' },
-      { status: 422 }
-    )
+  // If amount could not be auto-detected, ask for manual entry
+  if (validation.amount === null) {
+    return NextResponse.json({ needsManualAmount: true })
   }
 
-  const discount = calculateDiscount(ocr.amount)
+  const discount = calculateDiscount(validation.amount)
   if (!discount.eligible) {
-    return NextResponse.json(
-      { error: discount.reason },
-      { status: 422 }
-    )
+    return NextResponse.json({ error: discount.reason }, { status: 422 })
   }
 
   return NextResponse.json({
-    amount: ocr.amount,
+    amount: validation.amount,
     discount: discount.discountAmount,
-    confidence: ocr.confidence,
+    autoDetected: true,
   })
 }
