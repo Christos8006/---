@@ -34,12 +34,11 @@ export function hashReceiptImage(base64Image: string): string {
 }
 
 /**
- * Generates a unique QR code string for a coupon.
+ * Generates a unique 6-digit random coupon code.
  */
 export function generateQRCode(): string {
-  const timestamp = Date.now().toString(36)
-  const random = Math.random().toString(36).substring(2, 10)
-  return `TAKIS-${timestamp}-${random}`.toUpperCase()
+  const digits = Math.floor(100000 + Math.random() * 900000)
+  return digits.toString()
 }
 
 /**

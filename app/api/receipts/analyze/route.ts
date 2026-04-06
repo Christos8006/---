@@ -1,44 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validateReceiptQR } from '@/lib/receipt-validator'
+import { createAdminClient } from '@/lib/supabase/server'
+import { validateReceiptQR, getReceiptHash } from '@/lib/receipt-validator'
 import { calculateDiscount } from '@/lib/coupon-logic'
 
 export async function POST(req: NextRequest) {
-  const { qrContent, manualAmount } = await req.json()
+  const { qrContent } = await req.json()
+
   if (!qrContent) {
     return NextResponse.json({ error: 'Δεν βρέθηκε QR κωδικός' }, { status: 400 })
   }
 
-  // If manual amount provided, skip ΑΑΔΕ validation
-  if (manualAmount !== undefined) {
-    const discount = calculateDiscount(manualAmount)
-    if (!discount.eligible) {
-      return NextResponse.json({ error: discount.reason }, { status: 422 })
+  // Check immediately if this receipt was already used
+  const receiptHash = getReceiptHash(qrContent)
+  try {
+    const supabase = await createAdminClient()
+    const { data: existing } = await supabase
+      .from('receipts')
+      .select('id')
+      .eq('receipt_hash', receiptHash)
+      .single()
+
+    if (existing) {
+      return NextResponse.json(
+        { error: 'Αυτή η απόδειξη έχει ήδη σκαναριστεί και χρησιμοποιηθεί. Κάθε απόδειξη ισχύει μόνο μία φορά.' },
+        { status: 409 }
+      )
     }
-    return NextResponse.json({
-      amount: manualAmount,
-      discount: discount.discountAmount,
-      autoDetected: false,
-    })
+  } catch {
+    // If DB check fails, continue to validation
   }
 
-  // Validate via ΑΑΔΕ myDATA
+  // Validate via ΑΑΔΕ — automatically extracts amount
   const validation = await validateReceiptQR(qrContent)
 
-  if (!validation.valid) {
-    return NextResponse.json({ error: validation.error }, { status: 422 })
-  }
-
-  // Check if receipt is from ΤΑΚΗΣ (if ΑΦΜ validation is configured)
-  if (validation.vatNumber && !validation.isFromTakis) {
+  if (!validation.valid || validation.amount === null) {
     return NextResponse.json(
-      { error: 'Η απόδειξη δεν ανήκει στο ΤΑΚΗΣ. Χρησιμοποίησε μόνο αποδείξεις από το κατάστημά μας.' },
+      { error: validation.error || 'Μη έγκυρη απόδειξη' },
       { status: 422 }
     )
-  }
-
-  // If amount could not be auto-detected, ask for manual entry
-  if (validation.amount === null) {
-    return NextResponse.json({ needsManualAmount: true })
   }
 
   const discount = calculateDiscount(validation.amount)

@@ -99,24 +99,37 @@ export default function MyCouponsPage() {
             {/* Active coupons */}
             {active.map(coupon => (
               <div key={coupon.id} className="bg-white rounded-3xl overflow-hidden shadow-sm border-2 border-green-200">
-                <div className="bg-gradient-to-r from-yellow-400 to-yellow-300 px-5 py-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-yellow-900 text-xs font-semibold uppercase tracking-wide">Ενεργό Κουπόνι</p>
-                    <p className="text-red-800 text-3xl font-black">€{coupon.discount_amount} έκπτωση</p>
+                <div className="bg-gradient-to-br from-yellow-400 to-yellow-300 px-5 py-5 text-center">
+                  <p className="text-yellow-900 text-xs font-semibold uppercase tracking-wide mb-1">Ενεργό Κουπόνι</p>
+                  <p className="text-red-800 text-4xl font-black mb-4">€{coupon.discount_amount} έκπτωση</p>
+
+                  {/* QR Code */}
+                  <div className="bg-white rounded-2xl p-3 inline-block mb-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?data=${coupon.qr_code}&size=140x140&margin=4&color=111827`}
+                      alt="QR Κουπόνι"
+                      width={140}
+                      height={140}
+                      className="block"
+                    />
                   </div>
-                  <Badge className="bg-green-600 text-white text-xs">ΕΝΕΡΓΟ</Badge>
-                </div>
-                <div className="px-5 py-4">
-                  <div className="bg-gray-50 rounded-xl px-4 py-3 mb-3">
-                    <p className="text-gray-400 text-xs mb-1">Κωδικός κουπονιού</p>
-                    <p className="font-mono font-bold text-gray-800 text-sm tracking-widest">{coupon.qr_code}</p>
+
+                  {/* 6-digit code */}
+                  <div className="bg-white rounded-xl px-5 py-3 inline-block">
+                    <p className="text-gray-400 text-xs mb-1 uppercase tracking-widest">Κωδικός</p>
+                    <p className="font-mono text-3xl font-black text-red-700 tracking-[0.3em]">{coupon.qr_code}</p>
                   </div>
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>Εκδόθηκε: {formatDateGR(coupon.created_at)}</span>
-                    <span className="text-orange-600 font-semibold">
+
+                  <div className="flex justify-between items-center mt-3">
+                    <Badge className="bg-green-600 text-white text-xs">ΕΝΕΡΓΟ</Badge>
+                    <span className="text-yellow-900 text-xs font-semibold">
                       {daysUntilExpiry(coupon.expires_at)} μέρες ακόμα
                     </span>
                   </div>
+                </div>
+                <div className="px-5 py-3 text-center">
+                  <p className="text-gray-400 text-xs">Εκδόθηκε: {formatDateGR(coupon.created_at)}</p>
                 </div>
               </div>
             ))}

@@ -66,10 +66,21 @@ export async function sendCouponEmail({
                 <div style="font-size:52px;font-weight:900;color:#b91c1c;margin:8px 0;">€${discountAmount}</div>
                 <p style="margin:0 0 20px;color:#78350f;font-size:14px;">έκπτωση στην επόμενη παραγγελία σου</p>
                 
-                <!-- Coupon Code -->
-                <div style="background:#ffffff;border-radius:10px;padding:14px 20px;display:inline-block;">
+                <!-- QR Code Image -->
+                <div style="background:#ffffff;border-radius:12px;padding:16px;display:inline-block;margin-bottom:12px;">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?data=${couponCode}&size=160x160&margin=4&color=111827"
+                    alt="QR Κωδικός Κουπονιού"
+                    width="160"
+                    height="160"
+                    style="display:block;"
+                  />
+                </div>
+                <br/>
+                <!-- 6-digit Code -->
+                <div style="background:#ffffff;border-radius:10px;padding:14px 28px;display:inline-block;">
                   <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">Κωδικός Κουπονιού</p>
-                  <p style="margin:0;font-family:monospace;font-size:18px;font-weight:700;color:#111827;letter-spacing:2px;">${couponCode}</p>
+                  <p style="margin:0;font-family:monospace;font-size:32px;font-weight:900;color:#b91c1c;letter-spacing:8px;">${couponCode}</p>
                 </div>
 
                 <p style="margin:16px 0 0;font-size:12px;color:#92400e;">
@@ -100,7 +111,7 @@ export async function sendCouponEmail({
                   <tr>
                     <td style="padding:5px 0;">
                       <span style="background:#b91c1c;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-block;text-align:center;line-height:22px;font-size:12px;font-weight:700;margin-right:10px;">3</span>
-                      <span style="font-size:13px;color:#6b7280;">Δείξε τον κωδικό <strong style="color:#111;">${couponCode}</strong> στον ταμία</span>
+                      <span style="font-size:13px;color:#6b7280;">Δείξε τον κωδικό <strong style="color:#b91c1c;font-size:16px;letter-spacing:3px;">${couponCode}</strong> ή το QR στον ταμία</span>
                     </td>
                   </tr>
                 </table>
