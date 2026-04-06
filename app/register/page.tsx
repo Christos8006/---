@@ -32,6 +32,7 @@ export default function RegisterPage() {
       password: form.password,
       options: {
         data: { name: form.name, phone: form.phone },
+        emailRedirectTo: undefined,
       },
     })
 
@@ -43,8 +44,21 @@ export default function RegisterPage() {
       return
     }
 
-    toast.success('Ο λογαριασμός σου δημιουργήθηκε! Μπορείς τώρα να συνδεθείς.')
-    router.push('/login')
+    // Auto sign in after register (no email confirmation needed)
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: form.email,
+      password: form.password,
+    })
+
+    if (signInError) {
+      toast.success('Ο λογαριασμός δημιουργήθηκε! Συνδέσου τώρα.')
+      router.push('/login')
+      return
+    }
+
+    toast.success('Καλωσόρισες!')
+    router.push('/coupons')
+    router.refresh()
   }
 
   return (
