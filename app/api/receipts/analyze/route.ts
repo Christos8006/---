@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { validateReceiptQR } from '@/lib/receipt-validator'
 import { calculateDiscount } from '@/lib/coupon-logic'
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Απαιτείται σύνδεση' }, { status: 401 })
-  }
-
   const { qrContent, manualAmount } = await req.json()
   if (!qrContent) {
     return NextResponse.json({ error: 'Δεν βρέθηκε QR κωδικός' }, { status: 400 })
