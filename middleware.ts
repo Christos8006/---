@@ -25,18 +25,19 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    const path = request.nextUrl.pathname
 
-  const path = request.nextUrl.pathname
+    if (!user && (path.startsWith('/scan') || path.startsWith('/coupons') || path.startsWith('/profile'))) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
 
-  // Protect customer routes
-  if (!user && (path.startsWith('/scan') || path.startsWith('/coupons') || path.startsWith('/profile'))) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  // Protect admin routes
-  if (!user && path.startsWith('/admin') && !path.startsWith('/admin/login')) {
-    return NextResponse.redirect(new URL('/admin/login', request.url))
+    if (!user && path.startsWith('/admin') && !path.startsWith('/admin/login')) {
+      return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
+  } catch {
+    // If Supabase fails, allow the request through
   }
 
   return supabaseResponse
