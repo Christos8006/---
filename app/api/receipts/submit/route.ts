@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import {
   generateQRCode,
   calculateDiscount,
   calculateExpiryDate,
 } from '@/lib/coupon-logic'
 import { getReceiptHash } from '@/lib/receipt-validator'
+import { sendCouponEmail } from '@/lib/email'
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Απαιτείται σύνδεση' }, { status: 401 })
-  }
+  const supabase = await createAdminClient()
 
-  const { qrContent, amount } = await req.json()
-  if (!qrContent || !amount) {
+  const { qrContent, amount, customerName, customerEmail } = await req.json()
+
+  if (!qrContent || !amount || !customerName || !customerEmail) {
     return NextResponse.json({ error: 'Ελλιπή δεδομένα' }, { status: 400 })
   }
+
+  const emailLower = customerEmail.toLowerCase().trim()
 
   // Anti-fraud: check if this receipt QR was already used
   const receiptHash = getReceiptHash(qrContent)
@@ -40,11 +40,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: discount.reason }, { status: 422 })
   }
 
-  // Create receipt record (store QR content as image_url since no photo)
+  // Find or create customer by email
+  let customerId: string
+
+  const { data: existingCustomer } = await supabase
+    .from('customers')
+    .select('id')
+    .eq('email', emailLower)
+    .single()
+
+  if (existingCustomer) {
+    customerId = existingCustomer.id
+  } else {
+    const { data: newCustomer, error: customerError } = await supabase
+      .from('customers')
+      .insert({ name: customerName.trim(), email: emailLower })
+      .select()
+      .single()
+
+    if (customerError || !newCustomer) {
+      return NextResponse.json({ error: 'Σφάλμα αποθήκευσης πελάτη' }, { status: 500 })
+    }
+    customerId = newCustomer.id
+  }
+
+  // Create receipt record
   const { data: receipt, error: receiptError } = await supabase
     .from('receipts')
     .insert({
-      user_id: user.id,
+      customer_id: customerId,
       image_url: qrContent,
       amount,
       receipt_hash: receiptHash,
@@ -63,7 +87,7 @@ export async function POST(req: NextRequest) {
   const { data: coupon, error: couponError } = await supabase
     .from('coupons')
     .insert({
-      user_id: user.id,
+      customer_id: customerId,
       receipt_id: receipt.id,
       discount_amount: discount.discountAmount,
       qr_code: qrCode,
@@ -74,6 +98,20 @@ export async function POST(req: NextRequest) {
 
   if (couponError || !coupon) {
     return NextResponse.json({ error: 'Σφάλμα δημιουργίας κουπονιού' }, { status: 500 })
+  }
+
+  // Send email with coupon
+  try {
+    await sendCouponEmail({
+      customerName: customerName.trim(),
+      customerEmail: emailLower,
+      couponCode: qrCode,
+      discountAmount: discount.discountAmount,
+      expiresAt: expiresAt.toISOString(),
+    })
+  } catch (emailErr) {
+    console.error('Email send failed:', emailErr)
+    // Don't fail the whole request if email fails
   }
 
   return NextResponse.json({

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { isCouponValid } from '@/lib/coupon-logic'
 
 export async function POST(req: NextRequest) {
@@ -25,10 +25,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Λείπει ο κωδικός κουπονιού' }, { status: 400 })
   }
 
-  // Fetch coupon by QR code
-  const { data: coupon } = await supabase
+  const adminSupabase = await createAdminClient()
+
+  // Fetch coupon by QR code (join customers)
+  const { data: coupon } = await adminSupabase
     .from('coupons')
-    .select('*, profiles(name, email, phone)')
+    .select('*, customers(name, email)')
     .eq('qr_code', qrCode)
     .single()
 
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Mark as redeemed
-  const { error: updateError } = await supabase
+  const { error: updateError } = await adminSupabase
     .from('coupons')
     .update({
       is_redeemed: true,
@@ -58,7 +60,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     discountAmount: coupon.discount_amount,
-    customerName: coupon.profiles?.name || 'Πελάτης',
+    customerName: coupon.customers?.name || 'Πελάτης',
     message: `Κουπόνι €${coupon.discount_amount} εξαργυρώθηκε επιτυχώς!`,
   })
 }
@@ -85,9 +87,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Λείπει ο κωδικός' }, { status: 400 })
   }
 
-  const { data: coupon } = await supabase
+  const adminSupabase = await createAdminClient()
+
+  const { data: coupon } = await adminSupabase
     .from('coupons')
-    .select('*, profiles(name, email, phone)')
+    .select('*, customers(name, email)')
     .eq('qr_code', qrCode)
     .single()
 

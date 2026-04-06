@@ -19,7 +19,7 @@ export default async function AdminCouponsPage() {
 
   const { data: coupons } = await supabase
     .from('coupons')
-    .select('*, profiles(name, email)')
+    .select('*, customers(name, email)')
     .order('created_at', { ascending: false })
     .limit(100)
 
@@ -60,7 +60,7 @@ export default async function AdminCouponsPage() {
 
               <div className="flex-1 min-w-0">
                 <p className="text-white font-medium text-sm truncate">
-                  {coupon.profiles?.name || coupon.profiles?.email || 'Άγνωστος'}
+                  {coupon.customers?.name || coupon.customers?.email || 'Άγνωστος'}
                 </p>
                 <p className="text-gray-500 font-mono text-xs truncate">{coupon.qr_code}</p>
                 <p className="text-gray-600 text-xs mt-0.5">

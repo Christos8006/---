@@ -1,16 +1,6 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 
-export default async function HomePage() {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) redirect('/coupons')
-  } catch {
-    // Supabase not configured yet - show landing page
-  }
-
+export default function HomePage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-red-700 to-red-900 flex flex-col items-center justify-center px-4">
       {/* Logo / Brand */}
@@ -33,7 +23,7 @@ export default async function HomePage() {
               1
             </div>
             <p className="text-white/90 text-sm pt-2">
-              Κάνε παραγγελία <strong>€10+</strong> στο κατάστημά μας
+              Βάλε το <strong>όνομα</strong> και το <strong>email</strong> σου
             </p>
           </div>
           <div className="flex items-start gap-3">
@@ -41,7 +31,7 @@ export default async function HomePage() {
               2
             </div>
             <p className="text-white/90 text-sm pt-2">
-              Σκάναρε την απόδειξή σου εδώ
+              Σκάναρε την απόδειξή σου (<strong>€10+</strong>)
             </p>
           </div>
           <div className="flex items-start gap-3">
@@ -49,7 +39,7 @@ export default async function HomePage() {
               3
             </div>
             <p className="text-white/90 text-sm pt-2">
-              Πάρε κουπόνι <strong>€1 ή €2</strong> έκπτωση για την επόμενη παραγγελία!
+              Πάρε το κουπόνι σου <strong>στο email</strong> αμέσως!
             </p>
           </div>
         </div>
@@ -70,16 +60,16 @@ export default async function HomePage() {
       {/* CTA Buttons */}
       <div className="w-full max-w-sm space-y-3">
         <Link
-          href="/register"
+          href="/scan"
           className="block w-full text-center bg-yellow-400 hover:bg-yellow-300 text-red-900 font-bold py-4 px-6 rounded-2xl text-lg transition-all shadow-lg active:scale-95"
         >
-          Ξεκίνα τώρα — Δωρεάν!
+          📷 Σκάναρε Απόδειξη
         </Link>
         <Link
-          href="/login"
+          href="/my-coupons"
           className="block w-full text-center bg-white/15 hover:bg-white/25 text-white font-semibold py-4 px-6 rounded-2xl text-lg transition-all border border-white/30"
         >
-          Έχω ήδη λογαριασμό
+          🎟️ Τα κουπόνια μου
         </Link>
       </div>
 

@@ -1,44 +1,52 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
+import { formatDateGR } from '@/lib/coupon-logic'
 
-type Step = 'scanning' | 'confirming' | 'processing' | 'success' | 'needsAmount' | 'error'
+type Step = 'info' | 'scanning' | 'processing' | 'needsAmount' | 'success' | 'done' | 'error'
 
-interface OCRResult {
-  amount: number
-  discount: number
-  autoDetected: boolean
+interface CouponResult {
+  discountAmount: number
+  qrCode: string
+  expiresAt: string
 }
 
 export default function ScanPage() {
-  const router = useRouter()
-  const [step, setStep] = useState<Step>('scanning')
+  const [step, setStep] = useState<Step>('info')
+  const [customerName, setCustomerName] = useState('')
+  const [customerEmail, setCustomerEmail] = useState('')
   const [scannedQR, setScannedQR] = useState('')
   const [manualAmount, setManualAmount] = useState('')
-  const [result, setResult] = useState<OCRResult | null>(null)
+  const [analyzed, setAnalyzed] = useState<{ amount: number; discount: number; autoDetected: boolean } | null>(null)
+  const [coupon, setCoupon] = useState<CouponResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
-  const [scannerReady, setScannerReady] = useState(false)
   const html5QrRef = useRef<unknown>(null)
   const scannedRef = useRef(false)
 
   useEffect(() => {
-    startScanner()
-    return () => {
-      stopScanner()
+    if (step === 'scanning') {
+      startScanner()
     }
+    return () => {
+      if (step !== 'scanning') stopScanner()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
+
+  useEffect(() => {
+    return () => { stopScanner() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const startScanner = async () => {
+    scannedRef.current = false
     const { Html5Qrcode } = await import('html5-qrcode')
     const scanner = new Html5Qrcode('receipt-qr-reader')
     html5QrRef.current = scanner
-    setScannerReady(true)
 
     try {
       await scanner.start(
@@ -53,7 +61,7 @@ export default function ScanPage() {
         () => {}
       )
     } catch {
-      toast.error('Δεν ήταν δυνατή η πρόσβαση στην κάμερα. Δοκίμασε να δώσεις άδεια κάμερας.')
+      toast.error('Δεν ήταν δυνατή η πρόσβαση στην κάμερα. Δώσε άδεια κάμερας.')
     }
   }
 
@@ -63,6 +71,15 @@ export default function ScanPage() {
       await (html5QrRef.current as any).stop().catch(() => {})
       html5QrRef.current = null
     }
+  }
+
+  const handleInfoSubmit = () => {
+    if (!customerName.trim()) { toast.error('Βάλε το όνομά σου'); return }
+    if (!customerEmail.trim() || !customerEmail.includes('@')) {
+      toast.error('Βάλε έγκυρο email')
+      return
+    }
+    setStep('scanning')
   }
 
   const handleQRScanned = async (qrContent: string) => {
@@ -88,20 +105,14 @@ export default function ScanPage() {
       return
     }
 
-    setResult(data)
+    setAnalyzed(data)
     setStep('success')
   }
 
   const handleManualAmount = async () => {
     const amount = parseFloat(manualAmount.replace(',', '.'))
-    if (isNaN(amount) || amount <= 0) {
-      toast.error('Βάλε έγκυρο ποσό')
-      return
-    }
-    if (amount < 10) {
-      toast.error('Η παραγγελία πρέπει να είναι τουλάχιστον €10')
-      return
-    }
+    if (isNaN(amount) || amount <= 0) { toast.error('Βάλε έγκυρο ποσό'); return }
+    if (amount < 10) { toast.error('Η παραγγελία πρέπει να είναι τουλάχιστον €10'); return }
     setStep('processing')
 
     const res = await fetch('/api/receipts/analyze', {
@@ -111,43 +122,45 @@ export default function ScanPage() {
     })
 
     const data = await res.json()
-    if (!res.ok) {
-      setErrorMsg(data.error || 'Σφάλμα')
-      setStep('error')
-      return
-    }
+    if (!res.ok) { setErrorMsg(data.error || 'Σφάλμα'); setStep('error'); return }
 
-    setResult(data)
+    setAnalyzed(data)
     setStep('success')
   }
 
   const handleCreateCoupon = async () => {
-    if (!result || !scannedQR) return
+    if (!analyzed || !scannedQR) return
+    setStep('processing')
 
     const res = await fetch('/api/receipts/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ qrContent: scannedQR, amount: result.amount }),
+      body: JSON.stringify({
+        qrContent: scannedQR,
+        amount: analyzed.amount,
+        customerName,
+        customerEmail,
+      }),
     })
 
     const data = await res.json()
     if (!res.ok) {
       toast.error(data.error || 'Αδύνατη η δημιουργία κουπονιού')
+      setStep('success')
       return
     }
 
-    toast.success(`Κουπόνι €${result.discount} δημιουργήθηκε!`)
-    router.push('/coupons')
+    setCoupon(data)
+    setStep('done')
   }
 
-  const reset = async () => {
-    scannedRef.current = false
-    setStep('scanning')
+  const reset = () => {
+    setStep('info')
     setScannedQR('')
-    setResult(null)
+    setAnalyzed(null)
+    setCoupon(null)
     setErrorMsg('')
     setManualAmount('')
-    await startScanner()
   }
 
   return (
@@ -155,27 +168,98 @@ export default function ScanPage() {
       <div className="bg-gradient-to-r from-red-700 to-red-600 px-4 pt-12 pb-6">
         <div className="max-w-md mx-auto">
           <h1 className="text-2xl font-black text-white">Σκάναρε Απόδειξη</h1>
-          <p className="text-red-200 text-sm mt-1">Σκάναρε το QR code στην απόδειξη του ΤΑΚΗΣ</p>
+          <p className="text-red-200 text-sm mt-1">Κέρδισε κουπόνι έκπτωσης!</p>
         </div>
       </div>
 
       <div className="max-w-md mx-auto px-4 pt-6">
 
-        {/* QR Scanner */}
+        {/* Step 0: Name + Email */}
+        {step === 'info' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-3xl p-6 shadow-sm">
+              <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-7 h-7 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <h2 className="font-bold text-gray-800 text-xl text-center mb-1">Στοιχεία σου</h2>
+              <p className="text-gray-500 text-sm text-center mb-6">
+                Θα στείλουμε το κουπόνι σου στο email
+              </p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Όνομα</label>
+                  <Input
+                    type="text"
+                    placeholder="π.χ. Γιώργης"
+                    value={customerName}
+                    onChange={e => setCustomerName(e.target.value)}
+                    className="rounded-xl text-base"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Email</label>
+                  <Input
+                    type="email"
+                    placeholder="π.χ. giorgos@gmail.com"
+                    value={customerEmail}
+                    onChange={e => setCustomerEmail(e.target.value)}
+                    className="rounded-xl text-base"
+                    onKeyDown={e => e.key === 'Enter' && handleInfoSubmit()}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleInfoSubmit}
+              className="w-full bg-red-700 hover:bg-red-600 text-white rounded-2xl py-4 font-bold text-base"
+            >
+              Συνέχεια → Σκάναρε την Απόδειξη
+            </Button>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4">
+              <p className="text-yellow-800 font-semibold text-sm mb-1">💡 Χρειάζεσαι:</p>
+              <ul className="text-yellow-700 text-xs space-y-1">
+                <li>• Απόδειξη <strong>ΤΑΚΗΣ</strong> αξίας <strong>€10+</strong></li>
+                <li>• Να σκανάρεις το QR code στην απόδειξη</li>
+                <li>• Το κουπόνι θα σταλεί στο email σου αμέσως!</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Step 1: QR Scanner */}
         {step === 'scanning' && (
           <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <p className="text-blue-800 text-sm font-medium">Το κουπόνι θα σταλεί στο <strong>{customerEmail}</strong></p>
+            </div>
+
             <div className="bg-white rounded-3xl overflow-hidden shadow-sm">
               <div id="receipt-qr-reader" className="w-full" />
             </div>
+
             <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4">
               <p className="font-semibold text-yellow-800 text-sm mb-2">Οδηγίες:</p>
               <ul className="text-yellow-700 text-xs space-y-1">
                 <li>• Βρες το <strong>QR code</strong> στην απόδειξή σου</li>
                 <li>• Σκάναρέ το με την κάμερα</li>
                 <li>• Ισχύει μόνο για αποδείξεις ΤΑΚΗΣ άνω των €10</li>
-                <li>• Κάθε απόδειξη μπορεί να σκαναριστεί μόνο <strong>μία φορά</strong></li>
               </ul>
             </div>
+
+            <Button onClick={reset} variant="outline" className="w-full rounded-2xl py-3">
+              ← Πίσω
+            </Button>
           </div>
         )}
 
@@ -188,7 +272,7 @@ export default function ScanPage() {
               </svg>
             </div>
             <h3 className="font-bold text-gray-700 text-xl">Έλεγχος απόδειξης...</h3>
-            <p className="text-gray-400 text-sm mt-2">Επαλήθευση μέσω ΑΑΔΕ</p>
+            <p className="text-gray-400 text-sm mt-2">Παρακαλώ περίμενε</p>
           </div>
         )}
 
@@ -205,7 +289,7 @@ export default function ScanPage() {
                 Βάλε το ποσό της απόδειξης
               </h3>
               <p className="text-gray-500 text-sm text-center mb-5">
-                Το QR σκαναρίστηκε επιτυχώς. Βρες το σύνολο στην απόδειξή σου και πληκτρολόγησέ το.
+                Το QR σκαναρίστηκε. Βρες το σύνολο στην απόδειξή σου.
               </p>
               <div className="flex items-center gap-2">
                 <span className="text-2xl font-bold text-gray-600">€</span>
@@ -222,9 +306,7 @@ export default function ScanPage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <Button onClick={reset} variant="outline" className="flex-1 rounded-2xl py-3">
-                Ακύρωση
-              </Button>
+              <Button onClick={reset} variant="outline" className="flex-1 rounded-2xl py-3">Ακύρωση</Button>
               <Button
                 onClick={handleManualAmount}
                 className="flex-1 bg-red-700 hover:bg-red-600 text-white rounded-2xl py-3 font-bold"
@@ -235,8 +317,8 @@ export default function ScanPage() {
           </div>
         )}
 
-        {/* Success */}
-        {step === 'success' && result && (
+        {/* Confirmed amount - waiting for coupon creation */}
+        {step === 'success' && analyzed && (
           <div className="space-y-4">
             <div className="bg-white rounded-3xl p-6 shadow-sm text-center">
               <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
@@ -245,30 +327,71 @@ export default function ScanPage() {
                 </svg>
               </div>
               <p className="text-gray-500 text-sm">
-                {result.autoDetected ? 'Αναγνωρίστηκε αυτόματα' : 'Επιβεβαιωμένο ποσό'}
+                {analyzed.autoDetected ? 'Αναγνωρίστηκε αυτόματα' : 'Επιβεβαιωμένο ποσό'}
               </p>
-              <p className="text-5xl font-black text-gray-900 my-2">€{result.amount.toFixed(2)}</p>
+              <p className="text-5xl font-black text-gray-900 my-2">€{analyzed.amount.toFixed(2)}</p>
 
               <div className="bg-green-50 border border-green-200 rounded-2xl p-4 mt-4">
                 <p className="text-green-800 font-semibold">
                   Κερδίζεις κουπόνι{' '}
-                  <span className="text-2xl font-black">€{result.discount}</span> έκπτωση!
+                  <span className="text-2xl font-black">€{analyzed.discount}</span> έκπτωση!
                 </p>
-                <p className="text-green-600 text-xs mt-1">Ισχύει για 30 μέρες</p>
+                <p className="text-green-600 text-xs mt-1">Ισχύει για 30 μέρες · Θα σταλεί στο {customerEmail}</p>
               </div>
             </div>
 
             <div className="flex gap-3">
-              <Button onClick={reset} variant="outline" className="flex-1 rounded-2xl py-3">
-                Ακύρωση
-              </Button>
+              <Button onClick={reset} variant="outline" className="flex-1 rounded-2xl py-3">Ακύρωση</Button>
               <Button
                 onClick={handleCreateCoupon}
                 className="flex-1 bg-red-700 hover:bg-red-600 text-white rounded-2xl py-3 font-bold"
               >
-                Δημιούργησε Κουπόνι!
+                Δημιούργησε & Στείλε! 📧
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* Done - coupon created */}
+        {step === 'done' && coupon && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-3xl p-6 shadow-sm text-center">
+              <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="font-black text-gray-800 text-2xl">Μπράβο! 🎉</h3>
+              <p className="text-gray-500 text-sm mt-1 mb-4">Το κουπόνι σου δημιουργήθηκε!</p>
+
+              {/* Big discount badge */}
+              <div className="bg-gradient-to-br from-yellow-400 to-yellow-300 rounded-3xl p-6 my-4">
+                <p className="text-yellow-900 text-sm font-semibold mb-1">Κουπόνι Έκπτωσης</p>
+                <div className="text-6xl font-black text-red-800 mb-2">€{coupon.discountAmount}</div>
+                <div className="bg-white rounded-xl px-4 py-2 inline-block">
+                  <p className="font-mono text-sm font-bold text-gray-700 tracking-widest">{coupon.qrCode}</p>
+                </div>
+                <p className="text-yellow-900 text-xs mt-3 font-medium">
+                  Λήξη: {formatDateGR(coupon.expiresAt)}
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+                <p className="text-blue-800 text-sm font-semibold">📧 Στάλθηκε στο email σου!</p>
+                <p className="text-blue-600 text-xs mt-1">{customerEmail}</p>
+              </div>
+
+              <p className="text-gray-400 text-xs mt-3">
+                Δείξε τον κωδικό <strong>{coupon.qrCode}</strong> στον ταμία κατά την επόμενη παραγγελία σου.
+              </p>
+            </div>
+
+            <Button
+              onClick={reset}
+              className="w-full bg-red-700 hover:bg-red-600 text-white rounded-2xl py-4 font-bold"
+            >
+              Νέο Σκάναρισμα
+            </Button>
           </div>
         )}
 
@@ -290,6 +413,7 @@ export default function ScanPage() {
             </Button>
           </div>
         )}
+
       </div>
 
       <BottomNav />
