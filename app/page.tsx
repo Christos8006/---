@@ -1,65 +1,90 @@
-import Image from "next/image";
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 
-export default function Home() {
+export default async function HomePage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (user) {
+    redirect('/coupons')
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-gradient-to-b from-red-700 to-red-900 flex flex-col items-center justify-center px-4">
+      {/* Logo / Brand */}
+      <div className="text-center mb-10">
+        <div className="w-28 h-28 rounded-full bg-white flex items-center justify-center mx-auto mb-5 shadow-2xl">
+          <span className="text-5xl font-black text-red-700">T</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <h1 className="text-5xl font-black text-white tracking-tight">ΤΑΚΗΣ</h1>
+        <p className="text-red-200 mt-1 text-lg">Fast Food · Λάρισα</p>
+      </div>
+
+      {/* Value proposition */}
+      <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-3xl p-8 max-w-sm w-full text-center mb-8">
+        <h2 className="text-2xl font-bold text-white mb-4">
+          Κέρδισε εκπτώσεις!
+        </h2>
+        <div className="space-y-4 text-left">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-yellow-400 flex items-center justify-center shrink-0 font-bold text-red-900">
+              1
+            </div>
+            <p className="text-white/90 text-sm pt-2">
+              Κάνε παραγγελία <strong>€10+</strong> στο κατάστημά μας
+            </p>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-yellow-400 flex items-center justify-center shrink-0 font-bold text-red-900">
+              2
+            </div>
+            <p className="text-white/90 text-sm pt-2">
+              Σκάναρε την απόδειξή σου εδώ
+            </p>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-yellow-400 flex items-center justify-center shrink-0 font-bold text-red-900">
+              3
+            </div>
+            <p className="text-white/90 text-sm pt-2">
+              Πάρε κουπόνι <strong>€1 ή €2</strong> έκπτωση για την επόμενη παραγγελία!
+            </p>
+          </div>
         </div>
-      </main>
-    </div>
-  );
+
+        {/* Discount badges */}
+        <div className="flex gap-3 mt-6 justify-center">
+          <div className="bg-yellow-400 text-red-900 rounded-2xl px-4 py-3 text-center">
+            <div className="text-2xl font-black">€1</div>
+            <div className="text-xs font-semibold">για €10+</div>
+          </div>
+          <div className="bg-yellow-400 text-red-900 rounded-2xl px-4 py-3 text-center">
+            <div className="text-2xl font-black">€2</div>
+            <div className="text-xs font-semibold">για €20+</div>
+          </div>
+        </div>
+      </div>
+
+      {/* CTA Buttons */}
+      <div className="w-full max-w-sm space-y-3">
+        <Link
+          href="/register"
+          className="block w-full text-center bg-yellow-400 hover:bg-yellow-300 text-red-900 font-bold py-4 px-6 rounded-2xl text-lg transition-all shadow-lg active:scale-95"
+        >
+          Ξεκίνα τώρα — Δωρεάν!
+        </Link>
+        <Link
+          href="/login"
+          className="block w-full text-center bg-white/15 hover:bg-white/25 text-white font-semibold py-4 px-6 rounded-2xl text-lg transition-all border border-white/30"
+        >
+          Έχω ήδη λογαριασμό
+        </Link>
+      </div>
+
+      <p className="text-red-300 text-sm mt-8 text-center">
+        Βόλου 75, Λάρισα · Δευτ-Σαβ 12:00–01:00
+      </p>
+    </main>
+  )
 }
