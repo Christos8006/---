@@ -68,11 +68,13 @@ export default function AdminIssuePage() {
       toast.error(data.error || 'Σφάλμα')
       return
     }
-    toast.success(
-      data.emailSent
-        ? `Κουπόνι €${discountAmount} — στάλθηκε email`
-        : `Κουπόνι €${discountAmount} — χωρίς email (έλεγξε το προφίλ)`
-    )
+    if (data.emailSent) {
+      toast.success(`Κουπόνι €${discountAmount} — στάλθηκε email στον πελάτη`)
+    } else {
+      toast.warning(`Κουπόνι €${discountAmount} δημιουργήθηκε, αλλά όχι email: ${data.emailError || 'άγνωστο'}`, {
+        duration: 8000,
+      })
+    }
     setStep('done')
   }
 

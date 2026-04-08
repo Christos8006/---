@@ -65,11 +65,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Αποτυχία δημιουργίας κουπονιού' }, { status: 500 })
   }
 
-  const { data: authData } = await adminSb.auth.admin.getUserById(customerProfile.id)
-  const email = authData?.user?.email
+  const { data: authData, error: authLookupErr } = await adminSb.auth.admin.getUserById(customerProfile.id)
+  const email = authData?.user?.email?.trim() || null
   const displayName = [customerProfile.name, customerProfile.surname].filter(Boolean).join(' ') || 'Πελάτη'
 
-  if (email) {
+  let emailSent = false
+  let emailError: string | null = null
+
+  if (authLookupErr) {
+    emailError = 'Δεν βρέθηκε email χρήστη (έλεγξε Service Role στο Vercel)'
+  } else if (!email) {
+    emailError = 'Ο πελάτης δεν έχει email στον λογαριασμό'
+  } else {
     try {
       await sendCouponEmail({
         customerName: displayName,
@@ -78,8 +85,10 @@ export async function POST(req: NextRequest) {
         discountAmount,
         expiresAt: expiresAt.toISOString(),
       })
+      emailSent = true
     } catch (e) {
       console.error('issue-coupon email:', e)
+      emailError = e instanceof Error ? e.message : 'Αποτυχία αποστολής email (RESEND_API_KEY / domain)'
     }
   }
 
@@ -90,6 +99,7 @@ export async function POST(req: NextRequest) {
     discountAmount,
     expiresAt: expiresAt.toISOString(),
     customerName: displayName,
-    emailSent: Boolean(email),
+    emailSent,
+    emailError,
   })
 }

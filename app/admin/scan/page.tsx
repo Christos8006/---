@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import AdminNav from '@/components/AdminNav'
 import { formatDateGR } from '@/lib/coupon-logic'
+import { parseScanForRedeem, normalizeCouponCodeFromScan } from '@/lib/scan-normalize'
 
 type ScanState = 'idle' | 'scanning' | 'found' | 'redeeming' | 'done' | 'error'
 
@@ -76,9 +77,24 @@ export default function AdminScanPage() {
     setState('idle')
   }
 
-  const lookupCoupon = async (code: string) => {
+  const lookupCoupon = async (raw: string) => {
+    const parsed = parseScanForRedeem(raw)
+    if (parsed.kind === 'member') {
+      toast.error(
+        'Αυτό είναι QR μέλους. Για εξαργύρωση ζήτα από τον πελάτη το QR του κουπονιού (κάτω στο κινητό, 6 ψηφία) ή πληκτρολόγησέ το.',
+        { duration: 6000 }
+      )
+      setState('idle')
+      return
+    }
+    if (parsed.kind === 'invalid') {
+      toast.error('Δεν αναγνωρίστηκε κωδικός κουπονιού. Βάλε τους 6 αριθμούς.')
+      setState('idle')
+      return
+    }
+
     setState('scanning')
-    const res = await fetch(`/api/coupons/redeem?qr=${encodeURIComponent(code)}`)
+    const res = await fetch(`/api/coupons/redeem?qr=${encodeURIComponent(parsed.code)}`)
     const data = await res.json()
 
     if (!res.ok) {
@@ -94,7 +110,8 @@ export default function AdminScanPage() {
   const handleManualLookup = (e: React.FormEvent) => {
     e.preventDefault()
     if (!manualCode.trim()) return
-    lookupCoupon(manualCode.trim().toUpperCase())
+    const code = normalizeCouponCodeFromScan(manualCode) || manualCode.replace(/\D/g, '')
+    lookupCoupon(code.length === 6 ? code : manualCode.trim())
   }
 
   const handleRedeem = async () => {
@@ -129,8 +146,10 @@ export default function AdminScanPage() {
     <main className="min-h-screen bg-gray-900 pb-24">
       <div className="bg-gray-800 border-b border-gray-700 px-4 pt-12 pb-4">
         <div className="max-w-md mx-auto">
-          <h1 className="text-2xl font-black text-white">Σκάναρε Κουπόνι</h1>
-          <p className="text-gray-400 text-sm mt-1">Σκάναρε το QR του πελάτη για εξαργύρωση</p>
+          <h1 className="text-2xl font-black text-white">Εξαργύρωση κουπονιού</h1>
+          <p className="text-gray-400 text-sm mt-1">
+            Σκάναρε το <strong className="text-amber-200">μικρό QR του κουπονιού</strong> (6 ψηφία) — όχι το μεγάλο QR μέλους.
+          </p>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -35,6 +35,13 @@ export default function AccountPage() {
   const [email, setEmail] = useState('')
   const [coupons, setCoupons] = useState<Coupon[]>([])
   const [origin, setOrigin] = useState('')
+  const [userId, setUserId] = useState<string | null>(null)
+
+  const loadCoupons = useCallback(async () => {
+    const cr = await fetch('/api/coupons/mine', { cache: 'no-store' })
+    const cj = await cr.json()
+    if (cj.coupons) setCoupons(cj.coupons)
+  }, [])
 
   useEffect(() => {
     setOrigin(window.location.origin)
@@ -48,6 +55,8 @@ export default function AccountPage() {
         router.replace('/login')
         return
       }
+      if (cancelled) return
+      setUserId(user.id)
       const res = await fetch('/api/profile/me')
       const data = await res.json()
       if (cancelled) return
@@ -57,13 +66,43 @@ export default function AccountPage() {
       }
       setProfile(data.profile)
       setEmail(data.email || '')
-      const cr = await fetch('/api/coupons/mine')
-      const cj = await cr.json()
-      if (!cancelled) setCoupons(cj.coupons || [])
-      setReady(true)
+      await loadCoupons()
+      if (!cancelled) setReady(true)
     })()
     return () => { cancelled = true }
-  }, [router, supabase.auth])
+  }, [router, supabase.auth, loadCoupons])
+
+  /** Αυτόματη ανανέωση κουπονιών όταν ο ταμίας στέλνει κουπόνι */
+  useEffect(() => {
+    if (!userId || !ready) return
+
+    loadCoupons()
+    const interval = setInterval(loadCoupons, 7000)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadCoupons()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
+    const channel = supabase
+      .channel(`coupons-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'coupons',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => loadCoupons()
+      )
+      .subscribe()
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+      supabase.removeChannel(channel)
+    }
+  }, [userId, ready, loadCoupons, supabase])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -124,7 +163,10 @@ export default function AccountPage() {
           </Button>
         </div>
 
-        <h2 className="text-lg font-bold text-gray-800 px-1">Τα κουπόνια μου</h2>
+        <div className="flex items-center justify-between px-1 gap-2">
+          <h2 className="text-lg font-bold text-gray-800">Τα κουπόνια μου</h2>
+          <span className="text-xs text-gray-400 shrink-0">Ανανέωση αυτόματα</span>
+        </div>
 
         {active.map(c => (
           <div key={c.id} className="bg-white rounded-3xl border-2 border-green-200 overflow-hidden shadow-sm">
