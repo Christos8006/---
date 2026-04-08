@@ -16,7 +16,7 @@ interface CouponInfo {
     qr_code: string
     expires_at: string
     is_redeemed: boolean
-    profiles?: { name: string; email: string }
+    profiles?: { name: string; surname?: string; phone?: string; member_code?: string }
   }
   valid: boolean
   reason?: string
@@ -234,7 +234,7 @@ export default function AdminScanPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-400 text-sm">Πελάτης</span>
                   <span className="text-white font-medium text-sm">
-                    {couponInfo.coupon.profiles?.name || 'Άγνωστος'}
+                    {[couponInfo.coupon.profiles?.name, couponInfo.coupon.profiles?.surname].filter(Boolean).join(' ') || 'Άγνωστος'}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -298,7 +298,7 @@ export default function AdminScanPage() {
                 -€{couponInfo.coupon.discount_amount}
               </p>
               <p className="text-gray-400 text-sm mt-2">
-                {couponInfo.coupon.profiles?.name || 'Πελάτης'} εξοικονόμησε €{couponInfo.coupon.discount_amount}
+                {[couponInfo.coupon.profiles?.name, couponInfo.coupon.profiles?.surname].filter(Boolean).join(' ') || 'Πελάτης'} εξοικονόμησε €{couponInfo.coupon.discount_amount}
               </p>
             </div>
             <Button

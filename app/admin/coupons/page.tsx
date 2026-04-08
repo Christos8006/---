@@ -19,13 +19,19 @@ export default async function AdminCouponsPage() {
 
   const { data: coupons } = await supabase
     .from('coupons')
-    .select('*, customers(name, email)')
+    .select('*, profiles(name, surname, phone, member_code)')
     .order('created_at', { ascending: false })
     .limit(100)
 
   const active = (coupons || []).filter(c => !c.is_redeemed && new Date(c.expires_at) > new Date())
   const redeemed = (coupons || []).filter(c => c.is_redeemed)
   const expired = (coupons || []).filter(c => !c.is_redeemed && new Date(c.expires_at) <= new Date())
+
+  const customerLabel = (c: { profiles?: { name?: string; surname?: string; member_code?: string } }) => {
+    const p = c.profiles
+    const n = [p?.name, p?.surname].filter(Boolean).join(' ')
+    return n || p?.member_code || 'Άγνωστος'
+  }
 
   return (
     <main className="min-h-screen bg-gray-900 pb-24">
@@ -43,7 +49,6 @@ export default async function AdminCouponsPage() {
       <div className="max-w-2xl mx-auto px-4 pt-4 space-y-2">
         {(coupons || []).map(coupon => {
           const isActive = !coupon.is_redeemed && new Date(coupon.expires_at) > new Date()
-          const isExpired = !coupon.is_redeemed && new Date(coupon.expires_at) <= new Date()
 
           return (
             <div
@@ -60,7 +65,7 @@ export default async function AdminCouponsPage() {
 
               <div className="flex-1 min-w-0">
                 <p className="text-white font-medium text-sm truncate">
-                  {coupon.customers?.name || coupon.customers?.email || 'Άγνωστος'}
+                  {customerLabel(coupon)}
                 </p>
                 <p className="text-gray-500 font-mono text-xs truncate">{coupon.qr_code}</p>
                 <p className="text-gray-600 text-xs mt-0.5">

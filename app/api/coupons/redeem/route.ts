@@ -9,7 +9,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Απαιτείται σύνδεση' }, { status: 401 })
   }
 
-  // Only admins can redeem coupons
   const { data: profile } = await supabase
     .from('profiles')
     .select('is_admin')
@@ -27,10 +26,9 @@ export async function POST(req: NextRequest) {
 
   const adminSupabase = await createAdminClient()
 
-  // Fetch coupon by QR code (join customers)
   const { data: coupon } = await adminSupabase
     .from('coupons')
-    .select('*, customers(name, email)')
+    .select('*, profiles(name, surname, phone, member_code)')
     .eq('qr_code', qrCode)
     .single()
 
@@ -38,13 +36,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Το κουπόνι δεν βρέθηκε' }, { status: 404 })
   }
 
-  // Validate coupon
   const validity = isCouponValid(coupon)
   if (!validity.valid) {
     return NextResponse.json({ error: validity.reason }, { status: 409 })
   }
 
-  // Mark as redeemed
   const { error: updateError } = await adminSupabase
     .from('coupons')
     .update({
@@ -57,10 +53,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Σφάλμα εξαργύρωσης' }, { status: 500 })
   }
 
+  const customerName =
+    [coupon.profiles?.name, coupon.profiles?.surname].filter(Boolean).join(' ') || 'Πελάτης'
+
   return NextResponse.json({
     success: true,
     discountAmount: coupon.discount_amount,
-    customerName: coupon.customers?.name || 'Πελάτης',
+    customerName,
     message: `Κουπόνι €${coupon.discount_amount} εξαργυρώθηκε επιτυχώς!`,
   })
 }
@@ -91,7 +90,7 @@ export async function GET(req: NextRequest) {
 
   const { data: coupon } = await adminSupabase
     .from('coupons')
-    .select('*, customers(name, email)')
+    .select('*, profiles(name, surname, phone, member_code)')
     .eq('qr_code', qrCode)
     .single()
 

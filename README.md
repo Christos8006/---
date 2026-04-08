@@ -4,17 +4,19 @@
 
 ---
 
-## Λειτουργία
+## Λειτουργία (v3 — λογαριασμός + ταμείο)
 
 | Παραγγελία | Κουπόνι |
 |---|---|
 | €10 – €19.99 | **€1 έκπτωση** |
 | €20+ | **€2 έκπτωση** |
 
-- Ο πελάτης φωτογραφίζει την απόδειξη → OCR αναγνωρίζει το ποσό → δημιουργείται κουπόνι με QR code
-- Κάθε κουπόνι ισχύει **30 μέρες** και μπορεί να εξαργυρωθεί **μόνο 1 φορά**
-- Κάθε απόδειξη μπορεί να χρησιμοποιηθεί **μόνο μία φορά** (anti-fraud)
-- Ο ταμίας σκανάρει το QR από το κινητό του πελάτη
+1. Στο μαγαζί: QR προς `/join` (εκτύπωση) → ο πελάτης κάνει **εγγραφή** (όνομα, επίθετο, κινητό, email, κωδικός).
+2. Στον **λογαριασμό** (`/account`) εμφανίζεται **μοναδικό QR μέλους** — ο ταμίας το σκανάρει από το κινητό του πελάτη.
+3. **Έκδοση κουπονιού** (`/admin/issue`): μετά το σκάναρισμα, ο ταμίας πατάει **€1** ή **€2** (ανάλογα με την αγορά). Στέλνεται **email** με τον κωδικό κουπονιού.
+4. **Εξαργύρωση** (`/admin/scan`): σκάναρισμα του κωδικού/QR του κουπονιού. Κάθε κουπόνι **30 μέρες**, **μία χρήση**.
+
+**Βάση:** τρέξε `supabase/schema-v3.sql` (διαγράφει παλιά guest πίνακα `customers` / `receipts` αν υπήρχαν).
 
 ---
 
@@ -24,19 +26,15 @@
 
 1. Δημιούργησε δωρεάν λογαριασμό στο [supabase.com](https://supabase.com)
 2. Δημιούργησε νέο project
-3. Πήγαινε στο **SQL Editor** και τρέξε το αρχείο `supabase/schema.sql`
+3. Πήγαινε στο **SQL Editor** και τρέξε `supabase/schema-v3.sql` (ή πρώτα `schema.sql` για νέο project, μετά προσαρμογές)
 4. Αντέγραψε τα credentials από **Project Settings → API**:
    - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
    - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY`
 
-### 2. Google Cloud Vision API (OCR)
+### 2. Resend (email κουπονιού)
 
-1. Πήγαινε στο [console.cloud.google.com](https://console.cloud.google.com)
-2. Δημιούργησε νέο project
-3. Ενεργοποίησε το **Cloud Vision API**
-4. Δημιούργησε **API Key** από Credentials
-5. Αντέγραψε το key → `GOOGLE_VISION_API_KEY`
+- `RESEND_API_KEY` στο `.env.local` και στο Vercel
 
 ### 3. Ρύθμισε το `.env.local`
 
@@ -44,8 +42,8 @@
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
-GOOGLE_VISION_API_KEY=AIza...
 ADMIN_SECRET=takis-admin-2024
+RESEND_API_KEY=re_...
 ```
 
 ### 4. Εκκίνηση
@@ -83,19 +81,20 @@ curl -X POST http://localhost:3000/api/admin/create \
 ### Πελάτης
 | URL | Λειτουργία |
 |---|---|
-| `/` | Landing page |
+| `/` | Αρχική |
+| `/join` | QR καταστήματος → εγγραφή |
 | `/register` | Εγγραφή |
 | `/login` | Σύνδεση |
-| `/scan` | Σκάναρε απόδειξη |
-| `/coupons` | Τα κουπόνια μου |
-| `/profile` | Στοιχεία & ιστορικό |
+| `/account` | QR μέλους + κουπόνια |
+| `/forgot-password` | Ανάκτηση κωδικού (email) |
 
 ### Ταμίας (Admin)
 | URL | Λειτουργία |
 |---|---|
-| `/admin/login` | Είσοδος υπαλλήλου |
-| `/admin/scan` | Σκάναρε QR πελάτη |
-| `/admin/coupons` | Λίστα κουπονιών |
+| `/admin/login` | Είσοδος |
+| `/admin/issue` | Σκάναρε QR μέλους → έκδοση €1 / €2 |
+| `/admin/scan` | Εξαργύρωση κουπονιού |
+| `/admin/coupons` | Λίστα |
 
 ---
 
